@@ -1,0 +1,25 @@
+node_modules/
+dist/
+build/
+.svelte-kit/
+.output/
+coverage/
+*.tsbuildinfo
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+# локальные дампы RCON (могут содержать реальные ID игроков)
+rcon-dumps/
+vite.config.*.timestamp-*
+data/
+config/servers.json
+secret.key
+# экспорт базы (содержит секрет!) и архивы для выгрузки на VPS
+squadpanel-export*.json.gz
+squadpanel*.tar.gz

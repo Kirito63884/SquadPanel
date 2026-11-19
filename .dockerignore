@@ -1,0 +1,17 @@
+**/node_modules
+**/dist
+**/build
+**/.svelte-kit
+.git
+.env
+.env.*
+!.env.example
+rcon-dumps
+docs
+data
+**/secret.key
+config/servers.json
+deploy
+*.json.gz
+*.tar.gz
+backups

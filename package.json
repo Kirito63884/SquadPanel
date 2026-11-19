@@ -1,0 +1,41 @@
+{
+  "name": "squadpanel",
+  "version": "0.5.1",
+  "private": true,
+  "description": "SquadPanel \u2014 self-hosted admin panel for Squad game servers",
+  "type": "module",
+  "workspaces": [
+    "packages/rcon",
+    "packages/logs",
+    "packages/core",
+    "packages/notify",
+    "apps/worker",
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "demo": "node scripts/demo.mjs",
+    "build": "npm run build:packages && npm run build -w @squadpanel/worker && npm run build -w @squadpanel/web",
+    "build:packages": "npm run build -w @squadpanel/rcon -w @squadpanel/logs -w @squadpanel/core -w @squadpanel/notify",
+    "predev": "npm run build:packages",
+    "start": "node scripts/start.mjs",
+    "test": "npm run test -w @squadpanel/rcon -w @squadpanel/logs -w @squadpanel/core -w @squadpanel/notify -w @squadpanel/worker",
+    "typecheck": "npm run typecheck -w @squadpanel/rcon -w @squadpanel/logs -w @squadpanel/core -w @squadpanel/notify -w @squadpanel/worker -w @squadpanel/web",
+    "rcon:probe": "npm run probe -w @squadpanel/rcon --",
+    "dev:web": "npm run dev -w @squadpanel/web",
+    "dev:worker": "npm run dev -w @squadpanel/worker",
+    "start:web": "npm run start -w @squadpanel/web",
+    "start:worker": "npm run start -w @squadpanel/worker",
+    "predemo": "npm run build:packages",
+    "db:generate": "npm run db:generate -w @squadpanel/core",
+    "db:export": "npm run build -w @squadpanel/rcon -w @squadpanel/core && node packages/core/dist/cli/transfer.js export",
+    "db:import": "npm run build -w @squadpanel/rcon -w @squadpanel/core && node packages/core/dist/cli/transfer.js import"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^6.0.3"
+  }
+}

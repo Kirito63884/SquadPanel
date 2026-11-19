@@ -1,0 +1,119 @@
+# SquadPanel — production stack for a separate VPS: Postgres + web + worker + Caddy (HTTPS).
+# Normally driven by deploy/install.sh and the `squadpanel` helper, which run:
+#   docker compose -f /opt/squadpanel/app/docker-compose.yml --env-file /opt/squadpanel/.env up -d --build
+# All settings come from that env file (see deploy/env.example). Only Caddy publishes ports (80/443);
+# Postgres, the web app and the worker API stay on the internal Docker network.
+name: squadpanel
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_USER: squadpanel
+      POSTGRES_DB: squadpanel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U squadpanel -d squadpanel"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  web:
+    build: { context: ., target: web }
+    image: squadpanel-web:${SQUADPANEL_VERSION:-local}
+    restart: unless-stopped
+    init: true
+    logging: *logging
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      # Public address of the panel (https://domain or http://IP): CSRF check, cookies (Secure on https)
+      ORIGIN: ${PANEL_PUBLIC_URL:?set PANEL_PUBLIC_URL in the env file}
+      SQUADPANEL_PUBLIC_URL: ${PANEL_PUBLIC_URL}
+      # Behind Caddy: the real client IP (login throttling, audit) is the last X-Forwarded-For hop.
+      # Safe because the web container is reachable only through Caddy, which overwrites the header.
+      ADDRESS_HEADER: X-Forwarded-For
+      XFF_DEPTH: "1"
+      DATABASE_URL: postgres://squadpanel:${POSTGRES_PASSWORD}@postgres:5432/squadpanel
+      SQUADPANEL_SECRET: ${SQUADPANEL_SECRET:?set SQUADPANEL_SECRET in the env file}
+      SQUADPANEL_SETUP_TOKEN: ${SQUADPANEL_SETUP_TOKEN:-}
+      SQUADPANEL_DATA_DIR: /data
+      SQUADPANEL_LANG: ${SQUADPANEL_LANG:-ru}
+      STEAM_API_KEY: ${STEAM_API_KEY:-}
+      WORKER_URL: http://worker:3101
+    volumes:
+      - data:/data
+    expose: ["3000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  worker:
+    build: { context: ., target: worker }
+    image: squadpanel-worker:${SQUADPANEL_VERSION:-local}
+    restart: unless-stopped
+    init: true
+    logging: *logging
+    environment:
+      NODE_ENV: production
+      SQUADPANEL_SECRET: ${SQUADPANEL_SECRET}
+      SQUADPANEL_DATA_DIR: /data
+      SQUADPANEL_WEB_URL: http://web:3000
+      # API only on the internal network (no `ports:`); every call needs the token from SQUADPANEL_SECRET
+      WORKER_API_HOST: 0.0.0.0
+      WORKER_API_PORT: 3101
+      SQUADPANEL_POLL_MS: ${SQUADPANEL_POLL_MS:-5000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Discord bot (if configured in the panel) runs inside this process; tokens stay in the DB.
+      SQUADPANEL_PUBLIC_URL: ${PANEL_PUBLIC_URL:-}
+    volumes:
+      - data:/data
+    expose: ["3101"]
+    depends_on:
+      web: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3101/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      # domain -> automatic HTTPS (Let's Encrypt); empty -> plain HTTP on port 80 (IP address)
+      PANEL_SITE: ${PANEL_DOMAIN:-:80}
+      ACME_EMAIL_LINE: ${ACME_EMAIL:+email ${ACME_EMAIL}}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  data:
+  caddy_data:
+  caddy_config:
